@@ -3,21 +3,71 @@
 /* Numerical library developed to solve 1D    */ 
 /* Poisson problem (Heat equation)            */
 /**********************************************/
-#include "lib_poisson1D.h"
+#include "../include/lib_poisson1D.h"
 
 void set_GB_operator_colMajor_poisson1D(double* AB, int *lab, int *la, int *kv){
+  for (int j=0;j<(*la);j++){
+    int k = j * (*lab);
+    if (*kv>=0){
+      for (int i=0;i< *kv;i++){
+	      AB[k + i] = 0.0;
+      }
+    }
+    // Set up the tridiagonals values to -1 & 2
+    AB[k + *kv] = -1.0;
+    AB[k + *kv + 1] = 2.0;
+    AB[k + *kv + 2] = -1.0;
+  }
+  // First & Last element = 0
+  AB[0] = 0.0;
+  if (*kv == 1) {
+    AB[1]=0;
+  }
+  AB[(*lab)*(*la)-1]=0.0;
 }
 
 void set_GB_operator_colMajor_poisson1D_Id(double* AB, int *lab, int *la, int *kv){
+  for (j=0;j<(*la);j++){
+    int k = j * (*lab);
+    if (*kv>=0){
+      for (int i=0;i< *kv;i++){
+	      AB[k + i] = 0.0;
+      }
+    }
+    // Set up the tridiagonals values to -1 & 2
+    AB[k + *kv]=0.0;
+    AB[k + *kv + 1] = 1.0;
+    AB[k + *kv + 2] = 0.0;
+  }
+  // First & Last element = 0
+  AB[1] = 0.0;
+  AB[(*lab)*(*la)-1] = 0.0;
 }
 
 void set_dense_RHS_DBC_1D(double* RHS, int* la, double* BC0, double* BC1){
+  // Set up the First & Last element of the Vector to -5 et +5
+  RHS[0] = *BC0;
+  RHS[*la-1] = *BC1;
+
+  // the remaining elements are equal to 0
+  for (int i=1;i<(*la-1);i++) {
+    RHS[i] = 0.0;
+  }
 }  
 
 void set_analytical_solution_DBC_1D(double* EX_SOL, double* X, int* la, double* BC0, double* BC1){
+  const double DELTA_T = *BC1 - *BC0;   // DELTA TEMPERATURE
+
+  for (int i=0;i<(*la);i++) {
+    EX_SOL[i] = *BC0 + X[i] * DELTA_T;      // Analytical Sol Equation
+  }
 }  
 
 void set_grid_points_1D(double* x, int* la){
+  double h = 1.0 /((*la) + 1);           // le pas h
+  for (int i = 0; i < (*la); i++) {
+    x[i] = (i + 1) * h;
+  }
 }
 
 void write_GB_operator_rowMajor_poisson1D(double* AB, int* lab, int* la, char* filename){
