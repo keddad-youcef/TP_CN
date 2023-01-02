@@ -19,7 +19,7 @@ int main(int argc,char *argv[])
   int info;
   int NRHS;
   double T0, T1;
-  double *RHS, *EX_SOL, *X;
+  double *RHS, *EX_SOL, *X, *RHS2;
   double **AAB;
   double *AB;
 
@@ -35,6 +35,7 @@ int main(int argc,char *argv[])
   RHS=(double *) malloc(sizeof(double)*la);
   EX_SOL=(double *) malloc(sizeof(double)*la);
   X=(double *) malloc(sizeof(double)*la);
+  RHS2=(double *) malloc(sizeof(double)*la);
 
 
   
@@ -59,8 +60,14 @@ int main(int argc,char *argv[])
 
   // CBLAS DGBMV
   
-  cblas_dgbmv(CblasColMajor, CblasConjNoTrans, lab, la, kl, ku, 1.0, AB, lab, EX_SOL, 1, 0.0, RHS, 1);
-  write_vec(RHS, &la, "dgbvm.dat");
+  cblas_dgbmv(CblasColMajor, CblasConjNoTrans, la, la, kl, ku, 1.0, AB+1, lab, EX_SOL, 1, 0.0, RHS2, 1);
+  write_vec(RHS2, &la, "dgbvm.dat");
+
+  cblas_daxpy(la, -1, RHS2, 1, RHS, 1);
+  double norm = cblas_dnrm2(la, RHS, 1);
+  printf("Validatio de dgbmv() = %f\n", norm);
+
+
 
   
   // cblas_dgbmv(CblasColMajor, CblasNoTrans, lab, la, kl, ku, 1, AB, lab, EX_SOL, 1, -1, RHS, 1);
