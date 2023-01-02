@@ -9,4 +9,4 @@
 #include <values.h>
 #include <float.h>
 #include <limits.h>
-#include "atlas_headers.h"
+#include "blaslapack_headers.h"
