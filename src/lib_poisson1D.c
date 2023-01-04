@@ -70,6 +70,34 @@ void set_grid_points_1D(double* x, int* la){
   }
 }
 
+// LU FACTORISATION FUNCTION
+void LU_Facto(double* AB, int *lab, int *la, int *kv){
+    int i, j, k, k1 = 3;
+
+
+      if (*kv>=0){
+        k1 = 4;
+        for (i=0;i< *kv;i++){
+            AB[i]=0.0;
+        }
+      }
+      AB[*kv+2]/=AB[*kv+1];
+    
+
+    for (j=1;j<(*la);j++){
+      k = j*(*lab);
+      if (*kv>=0){
+        for (i=0;i< *kv;i++){
+            AB[k+i]=0.0;
+        }
+      }
+
+      AB[k+ *kv+1]-=AB[k+ *kv]*AB[(k-k1)+ *kv+2];
+      AB[k+ *kv+2]/=AB[k+ *kv+1];
+    }
+
+  }
+
 void write_GB_operator_rowMajor_poisson1D(double* AB, int* lab, int* la, char* filename){
   FILE * file;
   int ii,jj;
