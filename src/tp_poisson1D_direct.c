@@ -5,6 +5,7 @@
 /******************************************/
 #include "../include/lib_poisson1D.h"
 #include "../include/blaslapack_headers.h"
+#include <time.h>
 
 
 int main(int argc,char *argv[])
@@ -21,12 +22,12 @@ int main(int argc,char *argv[])
   double T0, T1;
   double *RHS, *EX_SOL, *X, *RHS2;
   double **AAB;
-  double *AB;
+  double *AB, *AB_LU;
 
   double temp, relres;
 
   NRHS=1;
-  nbpoints=102;
+  nbpoints=12;
   la=nbpoints-2;
   T0=-5.0;
   T1=5.0;
@@ -53,95 +54,101 @@ int main(int argc,char *argv[])
   lab=kv+kl+ku+1;
 
   AB = (double *) malloc(sizeof(double)*lab*la);
+  AB_LU = (double *) malloc(sizeof(double)*lab*la);   // to store AB after LU factorisation
 
   set_GB_operator_colMajor_poisson1D(AB, &lab, &la, &kv);
+  set_GB_operator_colMajor_poisson1D(AB_LU, &lab, &la, &kv);
   write_GB_operator_colMajor_poisson1D(AB, &lab, &la, "AB.dat");
+
+  
 
 
   // CBLAS DGBMV
-  
   cblas_dgbmv(CblasColMajor, CblasConjNoTrans, la, la, kl, ku, 1.0, AB+1, lab, EX_SOL, 1, 0.0, RHS2, 1);
-  write_vec(RHS2, &la, "dgbvm.dat");
 
+  // Validation
   cblas_daxpy(la, -1, RHS2, 1, RHS, 1);
-  double norm = cblas_dnrm2(la, RHS, 1);
-  printf("Validatio de dgbmv() = %f\n", norm);
-
-
+  double norm_mv = cblas_dnrm2(la, RHS, 1);
 
   
-  // cblas_dgbmv(CblasColMajor, CblasNoTrans, lab, la, kl, ku, 1, AB, lab, EX_SOL, 1, -1, RHS, 1);
-
-  // for (int i = 0; i < la; i++) {
-  //   printf("y[%d] = %f\n", i, RHS[i]);
-  // }
-  //
-
- 
+  
+  //******** A*X = b PROBLEM **********//
 
   printf("Solution with LAPACK\n");
   /* LU Factorization */
   info=0;
   ipiv = (int *) calloc(la, sizeof(int));
-
-  //******LAPACKE_dgbsv**********// 
-  set_dense_RHS_DBC_1D(RHS,&la,&T0,&T1);
-  info = LAPACKE_dgbsv(LAPACK_COL_MAJOR, la, kl, ku, NRHS, AB, lab, ipiv, RHS, la);
   
-  if (info == 0) {
-    printf("\n INFO DGBSV = %d\n",info);
-    printf("LAPACKE_dgbsv SOL]\n\n");
-    for (int i = 0; i < la; i++) {
-      printf("X[%d] = %f\n", i, RHS[i]);
-    }
-  } else {
-    printf("Erreur : le système d'équations n'a pas pu être résolu.\n");
-  }
-  //
+
 
   //******LAPACKE_dgbtrs**********// 
-  
+  set_GB_operator_colMajor_poisson1D(AB, &lab, &la, &kv);
   set_dense_RHS_DBC_1D(RHS,&la,&T0,&T1);
+  clock_t dgbtrs_begin = clock();
+  info = LAPACKE_dgbtrf(LAPACK_COL_MAJOR, la, la, kl, ku, AB, lab, ipiv);   // LAPACKE CALL
   info = LAPACKE_dgbtrs(LAPACK_COL_MAJOR, 'N', la, kl, ku, NRHS, AB, lab, ipiv, RHS, la);
-  if (info == 0) {
-    printf("LAPACKE_dgbtrs SOL]\n\n");
-    for (int i = 0; i < la; i++) {
-      printf("X[%d] = %f\n", i, RHS[i]);
-    }
-  } else {
-    printf("Erreur : le système d'équations n'a pas pu être résolu.\n");
-  }
+  clock_t dgbtrs_end = clock();
+  write_vec(RHS, &la, "dgbtrs_sol.dat");
   
-  //
-
-  /* LU for tridiagonal matrix  (can replace dgbtrf_) */
-  // ierr = dgbtrftridiag(&la, &la, &kl, &ku, AB, &lab, ipiv, &info);
-
-  // write_GB_operator_colMajor_poisson1D(AB, &lab, &la, "LU.dat");
   
-  /* Solution (Triangular) */
-  // if (info==0){
-  //   dgbtrs_("N", &la, &kl, &ku, &NRHS, AB, &lab, ipiv, RHS, &la, &info);
-  //   if (info!=0){printf("\n INFO DGBTRS = %d\n",info);}
-  // }else{
-  //   printf("\n INFO = %d\n",info);
-  // }
+  // Computes execution time
+  double dgbtrs_delta = (double) (dgbtrs_end - dgbtrs_begin) / CLOCKS_PER_SEC;
+  printf("Execution time DGBTRS = %f sec\n", dgbtrs_delta);
+
+  
+
+  //******LAPACKE_dgbsv**********// 
+
+  set_GB_operator_colMajor_poisson1D(AB, &lab, &la, &kv);
+  set_dense_RHS_DBC_1D(RHS,&la,&T0,&T1);
+  clock_t dgbsv_begin = clock();
+  info = LAPACKE_dgbsv(LAPACK_COL_MAJOR, la, kl, ku, NRHS, AB, lab, ipiv, RHS, la);
+  write_vec(RHS, &la, "dgbsv_sol.dat");
+  clock_t dgbsv_end = clock();
+
+  // Computes execution time
+  double dgbsv_delta = (double) (dgbsv_end - dgbsv_begin) / CLOCKS_PER_SEC;
+  printf("Execution time DGBSV = %f sec\n", dgbsv_delta);
+
+
+  
+
+
+  
+  //*********** LU FACTORISATION ************//
+  
+
+  // FUNCTION CALL
+  LU_Facto(AB_LU, &lab, &la, &kv);     // Factorisation Implementation                         
+  write_GB_operator_colMajor_poisson1D(AB_LU, &lab, &la, "AB_LU_Facto.dat");
+
+
+  // LAPACK dgbtrf
+  set_GB_operator_colMajor_poisson1D(AB, &lab, &la, &kv);
+  LAPACKE_dgbtrf(LAPACK_COL_MAJOR, la, la, kl, ku, AB, lab, ipiv);
+  write_GB_operator_colMajor_poisson1D(AB_LU, &lab, &la, "LAPACKE_dgbtrf.dat");
+
+
+  // Validation
+  cblas_daxpy(la, -1, AB, 1, AB_LU, 1);
+  double norm_lu = cblas_dnrm2(la, AB_LU, 1);
+
+  // Print norms
+  printf("\n\n dgbmv() est valide et l'erreur = %e\n", norm_mv);
+  printf("\n\n LU_FACTO() est valide et l'erreur = %e\n", norm_lu);
 
 
 
   write_xy(RHS, X, &la, "SOL.dat");
 
   /* Relative forward error */
-  /* Relative residual */
 
   // Calcul de || X ||
-  temp = cblas_ddot(la, EX_SOL, 1, EX_SOL,1);
-  temp = sqrt(temp);
+  temp = cblas_dnrm2(la, EX_SOL, 1);
 
   // Calcul de || X - X'||
   cblas_daxpy(la, -1.0, RHS, 1, EX_SOL, 1);
-  relres = cblas_ddot(la, EX_SOL, 1, EX_SOL,1);
-  relres = sqrt(relres);
+  relres = cblas_dnrm2(la, EX_SOL, 1);
 
   // || X - X'|| / || X ||
   relres = relres / temp;
@@ -149,8 +156,10 @@ int main(int argc,char *argv[])
   printf("\nThe relative forward error is relres = %e\n",relres);
 
   free(RHS);
+  free(RHS2);
   free(EX_SOL);
   free(X);
   free(AB);
+  free(AB_LU);
   printf("\n\n--------- End -----------\n");
 }
