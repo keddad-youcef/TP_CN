@@ -224,33 +224,38 @@ double richardson_alpha_opt(int *la){
 
 void richardson_alpha(double *AB, double *RHS, double *X, double *alpha_rich, int *lab, int *la,int *ku, int*kl, double *tol, int *maxit, double *resvec, int *nbite){
   
-  cblas_dgbmv(CblasColMajor, CblasConjNoTrans, *la, *la, *kl, *ku, 1.0, AB, *lab, X, 1, 0.0, resvec, 1);
-  cblas_dscal(*la, -1.0, resvec, 1);
-  cblas_daxpy(*la, 1.0, RHS, 1, resvec, 1);
+  cblas_dgbmv(CblasColMajor, CblasConjNoTrans, *la, *la, *kl, *ku, 1.0, AB, *lab, X, 1, 0.0, resvec, 1);    // r = A * X
+  cblas_dscal(*la, -1.0, resvec, 1);              // r = -A * x
+  cblas_daxpy(*la, 1.0, RHS, 1, resvec, 1);       // r = b -A * X
 
 
-  double releres = cblas_dnrm2(*la, resvec, 1) / cblas_dnrm2(*la, RHS, 1);
+  double releres = cblas_dnrm2(*la, resvec, 1) / cblas_dnrm2(*la, RHS, 1);      // erreur residuelle
 
   while (releres > (*tol) && *nbite < *maxit)
   {
-    cblas_daxpy(*la, *alpha_rich, resvec, 1, X, 1);
+    cblas_daxpy(*la, *alpha_rich, resvec, 1, X, 1);           // iteration de Richardson
 
+
+    // Calcul de residu r
     cblas_dgbmv(CblasColMajor, CblasConjNoTrans, *la, *la, *kl, *ku, 1.0, AB, *lab, X, 1, 0.0, resvec, 1);
     cblas_dscal(*la, -1.0, resvec, 1);
     cblas_daxpy(*la, 1.0, RHS, 1, resvec, 1);
 
+
+    //Erreur residuelle
     releres = cblas_dnrm2(*la, resvec, 1) / cblas_dnrm2(*la, RHS, 1);
+
+    // increment iteration
     *nbite += 1;
   }
-  printf("\nrelers = %f\n", releres);
-  printf("\n\n\n iter richardson = %d", *nbite);
+  printf("\n\n\n iter richardson = %d\n\n\n", *nbite);
 }
 
 void extract_MB_jacobi_tridiag(double *AB, double *MB, int *lab, int *la,int *ku, int*kl, int *kv){
   for (int j=0;j<(*la);j++){
 
     int k = j * (*lab);
-    MB[k + *kv] = 1 / AB[k + *kv];
+    MB[k + *kv] = 1 / AB[k + *kv];    // M = inv(Diag(AB))
     
   }
 }
@@ -261,14 +266,18 @@ void extract_MB_gauss_seidel_tridiag(double *AB, double *MB, int *lab, int *la,i
   int *info;
   double *M = malloc(sizeof(double) * (*la) * (*la));
 
+
+  // M = D - E
   for (int i = 0; i < (*la) * (*la); i++) { M[i] = 0.0; }
 
-  for (int i = 0; i < (*la); i++) { M[i * (*la) + i] = AB[(*lab) * i + 1]; }
+  for (int i = 0; i < (*la); i++) { M[i * (*la) + i] = AB[(*lab) * i + 1]; }    // extraction du diagonale
 
-  for (size_t i = 0; i < (*la) - 1; i++) {
-    M[(i + 1) * (*la) + i] = AB[(*lab) * i + 2];
+  for (int i = 0; i < (*la) - 1; i++) {
+    M[(i + 1) * (*la) + i] = AB[(*lab) * i + 2];      // extraction de la sous diagonale
   }
 
+
+  // Calcul de l'inverse de M
   int *ipiv = malloc(sizeof(int) * (*la));
   LAPACKE_dgetrf(CblasRowMajor, (*la), (*la), M, (*la), ipiv);
   LAPACKE_dgetri(CblasRowMajor, (*la), M, (*la), ipiv);
@@ -276,7 +285,7 @@ void extract_MB_gauss_seidel_tridiag(double *AB, double *MB, int *lab, int *la,i
   
 
   
-
+  // Copie dans MB
   cblas_dcopy((*la)*(*la),M, 1, MB, 1);
   
 
@@ -286,10 +295,14 @@ void extract_MB_gauss_seidel_tridiag(double *AB, double *MB, int *lab, int *la,i
 
 void richardson_MB(double *AB, double *RHS, double *X, double *MB, int *lab, int *la,int *ku, int*kl, double *tol, int *maxit, double *resvec, int *nbite, int resol_type){
 
+  
+  // Calcul de residu r
   cblas_dgbmv(CblasColMajor, CblasConjNoTrans, *la, *la, *kl, *ku, 1.0, AB, *lab, X, 1, 0.0, resvec, 1);
   cblas_dscal(*la, -1.0, resvec, 1);
   cblas_daxpy(*la, 1.0, RHS, 1, resvec, 1);
 
+
+  //Erreur residuelle
   double releres = cblas_dnrm2(*la, resvec, 1) / cblas_dnrm2(*la, RHS, 1);
   
 
@@ -298,20 +311,23 @@ void richardson_MB(double *AB, double *RHS, double *X, double *MB, int *lab, int
   {
     if (resol_type == 1)
     {
-      cblas_dgemv(CblasColMajor, CblasConjNoTrans, *la, *la, 1.0, MB, *la, resvec, 1, 1.0, X, 1);
+      cblas_dgemv(CblasColMajor, CblasConjNoTrans, *la, *la, 1.0, MB, *la, resvec, 1, 1.0, X, 1);   // Xk = Xk + M(gauss) * r
     }
-    else {cblas_dgbmv(CblasColMajor, CblasConjNoTrans, *la, *la, *kl, *ku, 1.0, MB, *lab, resvec, 1, 1.0, X, 1);}
+    else {cblas_dgbmv(CblasColMajor, CblasConjNoTrans, *la, *la, *kl, *ku, 1.0, MB, *lab, resvec, 1, 1.0, X, 1);}   // Xk = Xk + M(jacobi) * r
     
     
     
-
+    // Calcul de residu r
     cblas_dgbmv(CblasColMajor, CblasConjNoTrans, *la, *la, *kl, *ku, 1.0, AB, *lab, X, 1, 0.0, resvec, 1);
     cblas_dscal(*la, -1.0, resvec, 1);
     cblas_daxpy(*la, 1.0, RHS, 1, resvec, 1);
 
-    *nbite += 1;
+    //Erreur residuelle
     releres = cblas_dnrm2(*la, resvec, 1) / cblas_dnrm2(*la, RHS, 1);
+
+    // increment iteration
+    *nbite += 1;
   }
-  printf("\n\n\n iter = %d", *nbite);
+  printf("\n\n\n iter = %d\n\n\n", *nbite);
 }
 
