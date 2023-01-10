@@ -327,6 +327,7 @@ void richardson_MB(double *AB, double *RHS, double *X, double *MB, int *lab, int
 
     // increment iteration
     *nbite += 1;
+ 
   }
   printf("\n\n\n iter = %d\n\n\n", *nbite);
 }
