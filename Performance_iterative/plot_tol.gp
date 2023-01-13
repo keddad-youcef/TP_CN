@@ -1,5 +1,5 @@
 set title "Convergence en fonction de la taille de matrice"
-set xlabel "taille de la matrice"
+set xlabel "Tolerence (10^-)"
 set ylabel "nombre d'iterations"
 set auto x
 set grid
