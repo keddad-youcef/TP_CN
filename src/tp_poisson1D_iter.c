@@ -5,6 +5,7 @@
 /******************************************/
 #include "../include/lib_poisson1D.h"
 #include "../include/blaslapack_headers.h"
+#include <time.h>
 
 int main(int argc,char *argv[])
 /* ** argc: Number of arguments */
@@ -59,29 +60,58 @@ int main(int argc,char *argv[])
   AB = (double *) malloc(sizeof(double)*lab*la);
   set_GB_operator_colMajor_poisson1D(AB, &lab, &la, &kv);
   
-  /* uncomment the following to check matrix A */
+  
   write_GB_operator_colMajor_poisson1D(AB, &lab, &la, "AB.dat");
   
   /********************************************/
   /* Solution (Richardson with optimal alpha) */
-
+  printf("*********Solution Richardson***********\n\n\n\n\n");
   /* Computation of optimum alpha */
   opt_alpha = richardson_alpha_opt(&la);
-  opt_alpha = 0.8;
   printf("Optimal alpha for simple Richardson iteration is : %lf",opt_alpha); 
 
   /* Solve */
   double tol=1e-3;
-  int maxit=1000;
+  int maxit=10000;
   double *resvec;
   int nbite=0;
 
   resvec=(double *) calloc(maxit, sizeof(double));
 
   /* Solve with Richardson alpha */
-   
+  clock_t richardson_begin = clock();
   richardson_alpha(AB, RHS, SOL, &opt_alpha, &lab, &la, &ku, &kl, &tol, &maxit, resvec, &nbite);
-  write_vec(SOL, &la, "SOL_RICHA.dat");
+  clock_t richardson_end = clock();
+
+
+  // Computes execution time
+  double richardson_delta = (double) (richardson_end - richardson_begin) / CLOCKS_PER_SEC;
+  printf("Execution time RICHARDSON = %f sec\n", richardson_delta);
+
+
+  /* Write solution */
+  write_vec(SOL, &la, "SOL_RICHARDSON.dat");
+
+  /* Write convergence history */
+  write_vec(resvec, &nbite, "RESVEC_RICHARDSON.dat");
+
+
+  /* Relative forward error */
+
+  // Calcul de || X ||
+  temp = cblas_dnrm2(la, EX_SOL, 1);
+  // Calcul de || X - X'||
+  cblas_daxpy(la, -1.0, SOL, 1, EX_SOL, 1);
+  relres = cblas_dnrm2(la, EX_SOL, 1);
+  // || X - X'|| / || X ||
+  relres = relres / temp;
+
+  printf("\nThe relative forward error for RICHARDSON is relres = %e\n\n",relres);
+  
+  
+  free(SOL);
+  free(resvec);
+  nbite = 0;
 
   /* Richardson General Tridiag */
 
@@ -89,27 +119,37 @@ int main(int argc,char *argv[])
   kv = 1;
   ku = 1;
   kl = 1;
-  MB = (double *) malloc(sizeof(double)*(lab)*la);
+  MB = (double *) malloc(sizeof(double)*(la)*(la));
 
-  
-  // extract_MB_jacobi_tridiag(AB, MB, &lab, &la, &ku, &kl, &kv);
-  // write_GB_operator_colMajor_poisson1D(MB, &lab, &la, "AB_Jakobi.dat");
-  
-  // extract_MB_gauss_seidel_tridiag(AB, MB, &lab, &la, &ku, &kl, &kv);
+
+  // Jakobi Call
+  printf("*********Solution JAKOBI***********\n\n\n\n\n");
+  SOL=(double *) calloc(la, sizeof(double));
+  resvec=(double *) calloc(maxit, sizeof(double));
+
+
+  // Extract Jaccobi MATRIX
+  clock_t jacobi_begin = clock();
+  extract_MB_jacobi_tridiag(AB, MB, &lab, &la, &ku, &kl, &kv);
   
   /* Solve with General Richardson */
-  // richardson_MB(AB, RHS, SOL, MB, &lab, &la, &ku, &kl, &tol, &maxit, resvec, &nbite);
-  // write_vec(SOL, &la, "SOL_RICHA_jacobi.dat");
-  
+  richardson_MB(AB, RHS, SOL, MB, &lab, &la, &ku, &kl, &tol, &maxit, resvec, &nbite, 0);
+  clock_t jacobi_end = clock();
+
+  // Computes execution time
+  double jacobi_delta = (double) (jacobi_end - jacobi_begin) / CLOCKS_PER_SEC;
+  printf("Execution time JAKOBI = %f sec\n", jacobi_delta);
+
+
   /* Write solution */
-  write_vec(SOL, &la, "SOL.dat");
+  write_vec(SOL, &la, "SOL_JAKOBI.dat");
 
   /* Write convergence history */
-  write_vec(resvec, &nbite, "RESVEC.dat");
+  write_vec(resvec, &nbite, "RESVEC_JAKOBI.dat");
 
 
   /* Relative forward error */
-
+  set_analytical_solution_DBC_1D(EX_SOL, X, &la, &T0, &T1);
   // Calcul de || X ||
   temp = cblas_dnrm2(la, EX_SOL, 1);
 
@@ -120,7 +160,56 @@ int main(int argc,char *argv[])
   // || X - X'|| / || X ||
   relres = relres / temp;
 
-  printf("\nThe relative forward error for richarson is relres = %e\n",relres);
+  printf("\nThe relative forward error for JACOBI is relres = %e\n\n",relres);
+
+
+  free(SOL);
+  free(MB);
+  free(resvec);
+  nbite = 0;
+  
+
+
+
+  printf("*********Solution GAUSS SEIDEL***********\n\n\n\n\n");
+  // Gauss SEIDEL Call
+  SOL=(double *) calloc(la, sizeof(double));
+  MB = (double *) malloc(sizeof(double)*(la)*(la));
+  resvec=(double *) calloc(maxit, sizeof(double));
+
+  // EXTRACT GAUSS SEIDEL MATRIX
+  clock_t gs_begin = clock();
+  extract_MB_gauss_seidel_tridiag(AB, MB, &lab, &la, &ku, &kl, &kv);
+  
+  /* Solve with General Richardson */
+  richardson_MB(AB, RHS, SOL, MB, &lab, &la, &ku, &kl, &tol, &maxit, resvec, &nbite, 1);
+  clock_t gs_end = clock();
+
+  
+
+  // Computes execution time
+  double gs_delta = (double) (gs_end - gs_begin) / CLOCKS_PER_SEC;
+  printf("Execution time GAUSS SEIDEL = %f sec\n", gs_delta);
+
+
+  /* Write solution */
+  write_vec(SOL, &la, "SOL_GAUSS_SEIDEL.dat");
+
+  /* Write convergence history */
+  write_vec(resvec, &nbite, "RESVEC_GAUSS_SEIDEL.dat");
+
+
+  /* Relative forward error */
+  set_analytical_solution_DBC_1D(EX_SOL, X, &la, &T0, &T1);
+  // Calcul de || X ||
+  temp = cblas_dnrm2(la, EX_SOL, 1);
+  // Calcul de || X - X'||
+  cblas_daxpy(la, -1.0, SOL, 1, EX_SOL, 1);
+  relres = cblas_dnrm2(la, EX_SOL, 1);
+  // || X - X'|| / || X ||
+  relres = relres / temp;
+
+  printf("\nThe relative forward error for GAUSS SEIDEL is relres = %e\n",relres);
 
   free(resvec);
   free(RHS);

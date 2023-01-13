@@ -27,7 +27,7 @@ int main(int argc,char *argv[])
   double temp, relres;
 
   NRHS=1;
-  nbpoints=12;
+  nbpoints=52;
   la=nbpoints-2;
   T0=-5.0;
   T1=5.0;
@@ -67,15 +67,16 @@ int main(int argc,char *argv[])
   cblas_dgbmv(CblasColMajor, CblasConjNoTrans, la, la, kl, ku, 1.0, AB+1, lab, EX_SOL, 1, 0.0, RHS2, 1);
 
   // Validation
+  temp = cblas_dnrm2(la, RHS, 1);
   cblas_daxpy(la, -1, RHS2, 1, RHS, 1);
   double norm_mv = cblas_dnrm2(la, RHS, 1);
+  norm_mv /= temp;
 
   
   
   //******** A*X = b PROBLEM **********//
 
   printf("Solution with LAPACK\n");
-  /* LU Factorization */
   info=0;
   ipiv = (int *) calloc(la, sizeof(int));
   
@@ -93,7 +94,7 @@ int main(int argc,char *argv[])
   
   // Computes execution time
   double dgbtrs_delta = (double) (dgbtrs_end - dgbtrs_begin) / CLOCKS_PER_SEC;
-  printf("Execution time DGBTRS = %f sec\n", dgbtrs_delta);
+  printf("Execution time DGBTRF + DGBTRS = %f sec\n", dgbtrs_delta);
 
   
 
@@ -103,8 +104,8 @@ int main(int argc,char *argv[])
   set_dense_RHS_DBC_1D(RHS,&la,&T0,&T1);
   clock_t dgbsv_begin = clock();
   info = LAPACKE_dgbsv(LAPACK_COL_MAJOR, la, kl, ku, NRHS, AB, lab, ipiv, RHS, la);
-  write_vec(RHS, &la, "dgbsv_sol.dat");
   clock_t dgbsv_end = clock();
+  write_vec(RHS, &la, "dgbsv_sol.dat");
 
   // Computes execution time
   double dgbsv_delta = (double) (dgbsv_end - dgbsv_begin) / CLOCKS_PER_SEC;
@@ -119,19 +120,33 @@ int main(int argc,char *argv[])
   
 
   // FUNCTION CALL
-  LU_Facto(AB_LU, &lab, &la, &kv);     // Factorisation Implementation                         
+  clock_t LU_begin = clock();
+  LU_Facto(AB_LU, &lab, &la, &kv);     // Factorisation Implementation 
+  clock_t LU_end = clock();                        
   write_GB_operator_colMajor_poisson1D(AB_LU, &lab, &la, "AB_LU_Facto.dat");
+
+  // Computes execution time
+  double LU_delta = (double) (LU_end - LU_begin) / CLOCKS_PER_SEC;
+  printf("Execution time LU = %f sec\n", LU_delta);
 
 
   // LAPACK dgbtrf
   set_GB_operator_colMajor_poisson1D(AB, &lab, &la, &kv);
+  clock_t dgbtrf_begin = clock();
   LAPACKE_dgbtrf(LAPACK_COL_MAJOR, la, la, kl, ku, AB, lab, ipiv);
+  clock_t dgbtrf_end = clock();
   write_GB_operator_colMajor_poisson1D(AB_LU, &lab, &la, "LAPACKE_dgbtrf.dat");
+
+  // Computes execution time
+  double dgbtrf_delta = (double) (dgbtrf_end - dgbtrf_begin) / CLOCKS_PER_SEC;
+  printf("Execution time dgbtrf = %f sec\n", dgbtrf_delta);
 
 
   // Validation
-  cblas_daxpy(la, -1, AB, 1, AB_LU, 1);
+  temp = cblas_dnrm2(la, AB, 1);
+  cblas_daxpy(la*lab, -1, AB, 1, AB_LU, 1);
   double norm_lu = cblas_dnrm2(la, AB_LU, 1);
+  norm_lu /= temp;
 
   // Print norms
   printf("\n\n dgbmv() est valide et l'erreur = %e\n", norm_mv);
@@ -144,7 +159,7 @@ int main(int argc,char *argv[])
   /* Relative forward error */
 
   // Calcul de || X ||
-  temp = cblas_dnrm2(la, EX_SOL, 1);
+  temp = cblas_dnrm2(la, RHS, 1);
 
   // Calcul de || X - X'||
   cblas_daxpy(la, -1.0, RHS, 1, EX_SOL, 1);
